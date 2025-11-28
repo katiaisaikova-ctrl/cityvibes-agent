@@ -1,4 +1,4 @@
-// Cityvibes Agent (Edge JS): live Ticketmaster (если есть TM_KEY) + mock fallback
+// Cityvibes Agent — гибрид: mock по умолчанию, Ticketmaster при наличии TM_KEY и from/to
 
 export const config = { runtime: "edge" };
 
@@ -77,15 +77,16 @@ export default async function handler(req) {
     const radiusKm = Number(url.searchParams.get("radiusKm") || 10);
     const TM_KEY = process.env.TM_KEY;
 
-    // Если ключа нет или не переданы from/to — сразу mock
+    // 1) Если нет TM_KEY или нет from/to — сразу возвращаем mock
     if (!TM_KEY || !from || !to) {
       return new Response(JSON.stringify({ events: MOCK_EVENTS, meta: { count: MOCK_EVENTS.length, source: "mock" } }), {
-        status: 200, headers: { "content-type": "application/json" }
+        status: 200,
+        headers: { "content-type": "application/json" }
       });
     }
 
-    // Иначе: Ticketmaster
-    const geoPoint = "u0qj2j6"; // Basel geohash
+    // 2) Пытаемся получить данные из Ticketmaster
+    const geoPoint = "u0qj2j6"; // Basel
     const tm = new URL("https://app.ticketmaster.com/discovery/v2/events.json");
     tm.searchParams.set("apikey", TM_KEY);
     tm.searchParams.set("geoPoint", geoPoint);
@@ -98,9 +99,10 @@ export default async function handler(req) {
 
     const r = await fetch(tm.toString(), { headers: { Accept: "application/json" } });
     if (!r.ok) {
-      // мягкий откат на mock
+      // fallback на mock
       return new Response(JSON.stringify({ events: MOCK_EVENTS, meta: { count: MOCK_EVENTS.length, source: "mock" } }), {
-        status: 200, headers: { "content-type": "application/json" }
+        status: 200,
+        headers: { "content-type": "application/json" }
       });
     }
 
@@ -133,8 +135,9 @@ export default async function handler(req) {
       };
     }).sort((a, b) => (a.start || "") > (b.start || "") ? 1 : -1);
 
-    const payload = events.length ? { events, meta: { count: events.length, source: "ticketmaster" } }
-                                  : { events: MOCK_EVENTS, meta: { count: MOCK_EVENTS.length, source: "mock" } };
+    const payload = events.length
+      ? { events, meta: { count: events.length, source: "ticketmaster" } }
+      : { events: MOCK_EVENTS, meta: { count: MOCK_EVENTS.length, source: "mock" } };
 
     return new Response(JSON.stringify(payload), {
       status: 200,
@@ -142,7 +145,8 @@ export default async function handler(req) {
     });
   } catch (e) {
     return new Response(JSON.stringify({ events: MOCK_EVENTS, meta: { count: MOCK_EVENTS.length, source: "mock" }, error: "Agent error" }), {
-      status: 200, headers: { "content-type": "application/json" }
+      status: 200,
+      headers: { "content-type": "application/json" }
     });
   }
 }
